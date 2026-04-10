@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Immigration Doc Extractor v8</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --y:#F5C000;--yd:#C49800;--ylight:rgba(245,192,0,0.08);
+  --bg:#0F0F0F;--bg2:#1A1A1A;--bg3:#242424;--bg4:#2E2E2E;
+  --border:#333;--border2:#444;
+  --t1:#F0EDE6;--t2:#888;--t3:#555;
+  --green:#2ECC71;--red:#E74C3C;--orange:#F39C12;--blue:#4A90D9;--ms:#0078D4;
+  --radius:10px;--radius-sm:6px;
+}
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'Syne',sans-serif}
+body{min-height:100vh;display:flex;flex-direction:column}
+.app-header{border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;background:rgba(15,15,15,0.96);backdrop-filter:blur(12px)}
+.logo-mark{display:flex;align-items:center;gap:10px}
+.logo-box{width:32px;height:32px;background:var(--y);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.app-name{font-size:15px;font-weight:800;letter-spacing:-.3px;color:var(--t1)}
+.app-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--t2);margin-top:1px}
+.ver{font-size:9px;background:var(--y);color:#111;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;font-family:'IBM Plex Mono',monospace}
+.header-right{display:flex;align-items:center;gap:14px}
+.api-area{display:flex;align-items:center;gap:8px}
+.api-label{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--t2)}
+.api-input{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--t1);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;width:240px;outline:none;transition:border-color .15s}
+.api-input:focus{border-color:var(--yd)}
+.api-dot{width:8px;height:8px;border-radius:50%;background:var(--t3);flex-shrink:0;transition:background .3s}
+.api-dot.ok{background:var(--green)}.api-dot.bad{background:var(--red)}
+.rate-badge{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:3px 8px;border-radius:20px;background:var(--bg3);color:var(--t2);border:1px solid var(--border);white-space:nowrap}
+.rate-badge.warn{color:var(--orange);border-color:rgba(243,156,18,.3);background:rgba(243,156,18,.08)}
+.rate-badge.danger{color:var(--red);border-color:rgba(231,76,60,.3);background:rgba(231,76,60,.08)}
+.guardrail{display:none;align-items:center;gap:10px;padding:10px 16px;border-radius:var(--radius-sm);margin-bottom:1rem;font-size:12px;font-family:'IBM Plex Mono',monospace;border:1px solid}
+.guardrail.warn{background:rgba(243,156,18,.08);border-color:rgba(243,156,18,.25);color:var(--orange)}
+.guardrail.err{background:rgba(231,76,60,.08);border-color:rgba(231,76,60,.25);color:var(--red)}
+.guardrail.ok{background:rgba(46,204,113,.08);border-color:rgba(46,204,113,.25);color:var(--green)}
+.guardrail.info{background:rgba(74,144,217,.08);border-color:rgba(74,144,217,.25);color:var(--blue)}
+.guardrail-icon{font-size:14px;flex-shrink:0}
+.guardrail-close{margin-left:auto;cursor:pointer;opacity:.6;font-size:16px;line-height:1;background:none;border:none;color:inherit;padding:0 2px}
+.guardrail-close:hover{opacity:1}
+.main{flex:1;max-width:1150px;width:100%;margin:0 auto;padding:2rem}
+.drop-zone{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:2.5rem;text-align:center;cursor:pointer;position:relative;transition:border-color .2s,background .2s;background:var(--bg2)}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--y);background:var(--ylight)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{width:48px;height:48px;margin:0 auto 14px;background:var(--y);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.drop-lbl{font-size:15px;font-weight:700;color:var(--t1)}
+.drop-hint{font-size:12px;color:var(--t2);margin-top:5px;font-family:'IBM Plex Mono',monospace}
+.fmt-pills{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.fmt-pill{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;background:var(--bg3);color:var(--t2);border:1px solid var(--border)}
+.queue{margin-top:1rem;display:flex;flex-direction:column;gap:6px}
+.q-item{display:grid;grid-template-columns:36px 1fr auto auto auto;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;transition:border-color .2s}
+.q-item.done{border-color:rgba(46,204,113,.25)}.q-item.error{border-color:rgba(231,76,60,.25)}.q-item.processing{border-color:rgba(243,156,18,.25)}
+.q-thumb{width:36px;height:36px;border-radius:5px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.q-thumb img{width:36px;height:36px;object-fit:cover}
+.q-thumb-lbl{font-size:9px;font-family:'IBM Plex Mono',monospace;color:var(--t2);font-weight:500;text-align:center}
+.q-name{font-size:13px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-sub{font-size:10px;color:var(--t2);font-family:'IBM Plex Mono',monospace;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-badge{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:3px 9px;border-radius:20px;white-space:nowrap;font-weight:500}
+.q-badge.pending{background:var(--bg3);color:var(--t2);border:1px solid var(--border)}
+.q-badge.processing{background:rgba(243,156,18,.15);color:var(--orange);border:1px solid rgba(243,156,18,.3)}
+.q-badge.done{background:rgba(46,204,113,.12);color:var(--green);border:1px solid rgba(46,204,113,.3)}
+.q-badge.error{background:rgba(231,76,60,.12);color:var(--red);border:1px solid rgba(231,76,60,.3)}
+.q-del{background:none;border:none;cursor:pointer;color:var(--t3);padding:4px 6px;border-radius:4px;font-size:16px;line-height:1;transition:color .15s}
+.q-del:hover{color:var(--red)}
+.actions{display:flex;gap:10px;margin-top:1.25rem;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:var(--radius-sm);font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .15s;letter-spacing:.2px;white-space:nowrap}
+.bp{background:var(--y);color:#111}.bp:hover{background:var(--yd);transform:translateY(-1px)}.bp:active{transform:none}.bp:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.bo{background:transparent;color:var(--t1);border:1px solid var(--border2)}.bo:hover{border-color:var(--t2);background:var(--bg2)}.bo:disabled{opacity:.35;cursor:not-allowed}
+.bgreen{background:transparent;color:var(--green);border:1px solid rgba(46,204,113,.35)}.bgreen:hover{background:rgba(46,204,113,.08)}.bgreen:disabled{opacity:.35;cursor:not-allowed}
+.bdanger{background:transparent;color:var(--red);border:1px solid rgba(231,76,60,.3)}.bdanger:hover{background:rgba(231,76,60,.08)}
+.borange{background:transparent;color:var(--orange);border:1px solid rgba(243,156,18,.35)}.borange:hover{background:rgba(243,156,18,.08)}.borange:disabled{opacity:.35;cursor:not-allowed}
+.progress-wrap{margin-top:1rem;display:none}
+.progress-track{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--y);border-radius:2px;transition:width .35s ease;width:0%}
+.progress-text{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--t2);margin-top:6px}
+.progress-eta{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--t3);margin-top:3px}
+#abortBtn{display:none}
+.results-section{margin-top:2rem;display:none}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:var(--t2)}
+.stats{display:flex;gap:16px;flex-wrap:wrap}
+.stat{font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--t2)}.stat b{color:var(--t1)}
+.tbl-scroll{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:980px}
+thead tr{background:var(--bg3)}
+th{padding:10px 12px;text-align:left;font-weight:600;white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t2);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;color:var(--t1);vertical-align:middle;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg2)}
+.cv{color:var(--green);font-weight:500}.cn{color:var(--t3);font-style:italic}.ce{color:var(--red);font-style:italic;font-size:11px}
+.cf{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--t2)}
+.cnew{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--y);word-break:break-all}
+.btn-dl{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid rgba(46,204,113,.35);color:var(--green);background:rgba(46,204,113,.06);font-family:'IBM Plex Mono',monospace;white-space:nowrap;transition:all .15s}
+.btn-dl:hover{background:rgba(46,204,113,.14)}
+.rename-badge{display:inline-block;font-size:9px;font-family:'IBM Plex Mono',monospace;background:rgba(245,192,0,.15);color:var(--y);border:1px solid rgba(245,192,0,.3);padding:2px 6px;border-radius:4px;margin-top:3px}
+.synced-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ms);margin-left:6px;vertical-align:middle}
+.conf-high{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:1px 5px;border-radius:3px;background:rgba(46,204,113,.12);color:var(--green);border:1px solid rgba(46,204,113,.2)}
+.conf-mid{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:1px 5px;border-radius:3px;background:rgba(243,156,18,.12);color:var(--orange);border:1px solid rgba(243,156,18,.2)}
+.conf-low{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:1px 5px;border-radius:3px;background:rgba(231,76,60,.12);color:var(--red);border:1px solid rgba(231,76,60,.2)}
+#toastArea{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none}
+.toast{font-size:12px;font-family:'IBM Plex Mono',monospace;padding:10px 16px;border-radius:var(--radius-sm);border:1px solid;max-width:340px;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{background:rgba(15,15,15,.95);border-color:rgba(46,204,113,.4);color:var(--green)}
+.toast.err{background:rgba(15,15,15,.95);border-color:rgba(231,76,60,.4);color:var(--red)}
+.toast.info{background:rgba(15,15,15,.95);border-color:rgba(74,144,217,.4);color:var(--blue)}
+.toast.warn{background:rgba(15,15,15,.95);border-color:rgba(243,156,18,.4);color:var(--orange)}
+.app-footer{border-top:1px solid var(--border);padding:1rem 2rem;text-align:center;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--t3)}
+.app-footer a{color:var(--t2);text-decoration:none}
+@media(max-width:600px){.app-header{padding:10px 1rem;height:auto;flex-wrap:wrap;gap:8px}.api-input{width:160px}.main{padding:1rem}}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="logo-mark">
+    <div class="logo-box">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <rect x="1" y="2" width="16" height="2" rx="1" fill="#111"/>
+        <rect x="1" y="6" width="11" height="2" rx="1" fill="#111"/>
+        <rect x="1" y="10" width="13" height="2" rx="1" fill="#111"/>
+        <rect x="1" y="14" width="7" height="2" rx="1" fill="#111"/>
+      </svg>
+    </div>
+    <div>
+      <div class="app-name">Immigration Doc Extractor <span class="ver">v8</span></div>
+      <div class="app-tag">Claude Opus 4.6 · Smart Rename · Auto Excel Append · Guardrails</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="rate-badge" id="rateBadge" title="API istek sayacı">0 / 100 istek</div>
+    <div class="api-area">
+      <span class="api-label">CLAUDE KEY</span>
+      <input class="api-input" type="password" id="apiKey" placeholder="sk-ant-api03-..." oninput="checkKey()"/>
+      <div class="api-dot" id="apiDot"></div>
+    </div>
+  </div>
+</header>
+<main class="main">
+  <div class="guardrail" id="guardrailBanner">
+    <span class="guardrail-icon" id="guardrailIcon">⚠</span>
+    <span id="guardrailMsg"></span>
+    <button class="guardrail-close" onclick="closeGuardrail()">×</button>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*,.pdf,.heic,.heif" multiple/>
+    <div class="drop-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M12 3v13M8 7l4-4 4 4" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#111" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="drop-lbl">Belgeleri buraya sürükle veya tıkla</div>
+    <div class="drop-hint">Birden fazla dosya — max 10MB/dosya · Max 100 dosya/oturum</div>
+    <div class="fmt-pills">
+      <span class="fmt-pill">PNG</span><span class="fmt-pill">JPG</span><span class="fmt-pill">JPEG</span>
+      <span class="fmt-pill">HEIC</span><span class="fmt-pill">HEIF</span><span class="fmt-pill">PDF</span>
+    </div>
+  </div>
+
+  <div class="queue" id="queue"></div>
+
+  <div class="actions">
+    <button class="btn bp" id="runBtn" disabled onclick="runAll()">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <circle cx="7.5" cy="7.5" r="6" stroke="#111" stroke-width="1.5"/>
+        <path d="M5 7.5l2 2 3-3" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Tüm Belgeleri Tara
+    </button>
+    <button class="btn borange" id="abortBtn" onclick="abortProcessing()">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="4" y="4" width="7" height="7" rx="1" fill="currentColor"/></svg>
+      Durdur
+    </button>
+    <button class="btn borange" id="retryBtn" style="display:none" onclick="retryErrors()">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+        <path d="M2 7.5c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M11 4l2 3 2-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Hatalıları Yeniden Dene
+    </button>
+    <button class="btn bgreen" id="zipBtn" style="display:none" onclick="downloadZip()">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 10l5 4 5-4M7 2v12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Tümünü İndir (ZIP)
+    </button>
+    <button class="btn bo" id="xlsBtn" style="display:none" onclick="downloadXlsx()">Excel Rapor</button>
+    <button class="btn bdanger" id="clearBtn" style="display:none" onclick="clearAll()">Temizle</button>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">Hazırlanıyor...</div>
+    <div class="progress-eta" id="progressEta"></div>
+  </div>
+
+  <div class="results-section" id="resultsSection">
+    <div class="section-header">
+      <div class="section-title">Sonuçlar</div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="tbl-scroll"><table id="tbl"></table></div>
+  </div>
+</main>
+<footer class="app-footer">
+  Powered by <a href="https://anthropic.com" target="_blank">Claude claude-opus-4-6</a> &nbsp;·&nbsp; Yellow Law Group PC · Internal Tool &nbsp;·&nbsp; v8
+</footer>
+<div id="toastArea"></div>
+<script>
+let files = [], results = [];
+let abortController = null;
+let isProcessing = false;
+let isAutoSyncing = false;
+
+const AUTOMATION_URL = 'https://defaultb262544cb80a4f7b8ca2546a76ead7.96.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/973ebc5df5ac40a091468c723fd77c82/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ba19aDwqWQjpTxL0xUN2eK_XX462nnaTVuSgPIiiKI8';
+const RATE_LIMIT = { maxPerMin: 20, maxSession: 100, window: 60000 };
+let requestLog = [];
+let sessionCount = 0;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILES_SESSION = 100;
+const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/heic', 'image/heif', 'application/pdf'];
+const COLS = [
+  { key: 'receiptNumber', label: 'Receipt #' },
+  { key: 'aNumber', label: 'A-Number' },
+  { key: 'applicantName', label: 'Applicant Name' },
+  { key: 'formType', label: 'Form' },
+  { key: 'noticeDate', label: 'Notice Date' },
+  { key: 'receivedDate', label: 'Received' },
+  { key: 'caseStatus', label: 'Status / Type' },
+  { key: 'uscisCenter', label: 'USCIS Center' },
+  { key: 'additionalNotes', label: 'Notes' }
+];
+
+const PROMPT = `You are an OCR specialist for U.S. immigration documents (USCIS). Carefully read the entire document and extract the fields below. Return ONLY a raw JSON object — no markdown, no explanation.
+
+══ FIELD RULES ══
+
+1. RECEIPT NUMBER — Format: [3-letter prefix][10 digits] = 13 chars total, no spaces.
+   Prefixes: WAC EAC SRC LIN MSC NBC IOE MGL ZLA ZSF ZNY ZCH ZBA
+   Example: WAC2190123456, MGL2485674304, IOE9749186233
+   Look for label "Receipt Number" or "Receipt No."
+
+2. A-NUMBER — A 9-digit alien registration number. Appears as:
+   "A 234 290 926" / "A-234-290-926" / "A234290926" / "Applicant A 234290926" / "A#: 245453376"
+   Also: a bare 9-digit number (not 10!) near applicant info or beside an applicant name.
+   Phone numbers are 10 digits (area code) in formats like (850) 123-4567 — do NOT confuse.
+   Strip spaces/dashes; return with leading A: e.g. "A234290926".
+
+3. APPLICANT NAME — CRITICAL: The top-left mailing address on I-797/I-797C goes to the ATTORNEY (e.g. a law firm). DO NOT use it. The actual applicant is in the form header table labeled "Applicant", "Beneficiary", or "Petitioner", or next to the A-Number. Use ONLY that name.
+
+4. docTypeShort — pick exactly one slug:
+   Receipt-Notice | Approval | Denial | Interview-Notice | Interview-Cancellation | Interview-Reschedule | Biometric-Notice | RFE | NOID | NOI | Transfer-Notice | EAD-Production | Travel-Doc | Other
+
+Return:
+{"receiptNumber":null,"aNumber":null,"applicantName":null,"dateOfBirth":null,"formType":null,"priorityDate":null,"noticeDate":null,"receivedDate":null,"caseStatus":null,"docTypeShort":"Other","uscisCenter":null,"additionalNotes":null}`;
+
+function toast(msg, type = 'info', duration = 4000) {
+  const area = document.getElementById('toastArea');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  area.appendChild(el);
+  requestAnimationFrame(() => { el.classList.add('show'); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+function showGuardrail(msg, type = 'warn', icon = '⚠') {
+  const el = document.getElementById('guardrailBanner');
+  document.getElementById('guardrailMsg').textContent = msg;
+  document.getElementById('guardrailIcon').textContent = icon;
+  el.className = 'guardrail ' + type;
+  el.style.display = 'flex';
+}
+function closeGuardrail() { document.getElementById('guardrailBanner').style.display = 'none'; }
+
+function updateRateBadge() {
+  const now = Date.now();
+  requestLog = requestLog.filter(t => now - t < RATE_LIMIT.window);
+  const perMin = requestLog.length;
+  const badge = document.getElementById('rateBadge');
+  badge.textContent = `${sessionCount} / ${RATE_LIMIT.maxSession} istek`;
+  badge.className = 'rate-badge';
+  if (sessionCount >= RATE_LIMIT.maxSession * 0.8) badge.classList.add('danger');
+  else if (sessionCount >= RATE_LIMIT.maxSession * 0.5) badge.classList.add('warn');
+  if (perMin >= RATE_LIMIT.maxPerMin * 0.8) {
+    showGuardrail(`Dakikada ${perMin} API isteği yapıldı (limit: ${RATE_LIMIT.maxPerMin}). Otomatik yavaşlatma aktif.`, 'warn', '⚡');
+  }
+}
+function canRequest() {
+  const now = Date.now();
+  requestLog = requestLog.filter(t => now - t < RATE_LIMIT.window);
+  if (sessionCount >= RATE_LIMIT.maxSession) {
+    showGuardrail(`Oturum limiti aşıldı (${RATE_LIMIT.maxSession} istek). Sayfayı yenileyerek devam edebilirsiniz.`, 'err', '🚫');
+    return false;
+  }
+  if (requestLog.length >= RATE_LIMIT.maxPerMin) return 'throttle';
+  return true;
+}
+function recordRequest() {
+  requestLog.push(Date.now());
+  sessionCount++;
+  updateRateBadge();
+}
+async function waitForRateWindow() {
+  const now = Date.now();
+  const old = requestLog.filter(t => now - t < RATE_LIMIT.window);
+  if (old.length >= RATE_LIMIT.maxPerMin) {
+    const oldest = old[0];
+    const wait = RATE_LIMIT.window - (now - oldest) + 200;
+    document.getElementById('progressEta').textContent = `⏳ Oran limiti: ${Math.ceil(wait / 1000)}s bekleniyor...`;
+    await sleep(wait);
+    document.getElementById('progressEta').textContent = '';
+  }
+}
+
+function validateFile(f) {
+  if (f.size > MAX_FILE_SIZE) return `Dosya çok büyük: ${fmtSz(f.size)} (max 10MB)`;
+  const t = f.type.toLowerCase();
+  const n = f.name.toLowerCase();
+  const ok = ALLOWED_TYPES.includes(t) || /\.(png|jpg|jpeg|heic|heif|pdf)$/i.test(n);
+  if (!ok) return `Desteklenmeyen dosya türü: ${f.name}`;
+  return null;
+}
+function validateApiKey(key) {
+  if (!key) return 'Claude API anahtarı girilmedi.';
+  if (!key.startsWith('sk-ant')) return 'API anahtarı formatı uygun değil (sk-ant ile başlamalı).';
+  if (key.length < 30) return 'API anahtarı çok kısa.';
+  return null;
+}
+function checkKey() {
+  const k = document.getElementById('apiKey').value.trim();
+  const dot = document.getElementById('apiDot');
+  if (k.startsWith('sk-ant') && k.length > 20) {
+    dot.className = 'api-dot ok';
+    closeGuardrail();
+  } else if (k.length > 5) {
+    dot.className = 'api-dot bad';
+    showGuardrail('API anahtarı formatı uygun görünmüyor. sk-ant-api03-... ile başlamalıdır. Gerçek doğrulama ilk API isteğinde yapılır.', 'warn', '🔑');
+  } else {
+    dot.className = 'api-dot';
+  }
+}
+function getKey() { return document.getElementById('apiKey').value.trim(); }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function fmtSz(b) { if (b < 1024) return b + ' B'; if (b < 1048576) return (b / 1024).toFixed(0) + ' KB'; return (b / 1048576).toFixed(1) + ' MB'; }
+function ext(f) { return (f.name.includes('.') ? f.name.split('.').pop() : 'pdf').toLowerCase(); }
+function nv(v) { return (!v || v === 'null' || v === null) ? null : String(v).trim(); }
+function isHeic(f) { return f.type === 'image/heic' || f.type === 'image/heif' || /\.(heic|heif)$/i.test(f.name); }
+async function maybeConvert(f) {
+  if (!isHeic(f)) return f;
+  try {
+    const b = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
+    const bl = Array.isArray(b) ? b[0] : b;
+    return new File([bl], f.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+  } catch (e) { return f; }
+}
+async function toB64(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Dosya okunamadı'));
+    r.readAsDataURL(f);
+  });
+}
+
+function buildName(parsed, orig, work) {
+  const an = nv(parsed.aNumber) ? nv(parsed.aNumber).replace(/[^A-Za-z0-9]/g, '') : null;
+  const nm = nv(parsed.applicantName) ? nv(parsed.applicantName).replace(/[^A-Za-z0-9\s,]/g, '').trim().replace(/[\s,]+/g, '-').replace(/-+/g, '-').replace(/-$/, '') : null;
+  const dt = nv(parsed.docTypeShort) || 'Doc';
+  const parts = [];
+  if (an) parts.push(an);
+  if (nm) parts.push(nm);
+  parts.push(dt);
+  const e = isHeic(orig) ? 'jpg' : ext(work || orig);
+  return parts.join('_') + '.' + e;
+}
+
+function calcConfidence(parsed) {
+  const fields = ['receiptNumber', 'aNumber', 'applicantName', 'formType', 'noticeDate', 'caseStatus'];
+  const filled = fields.filter(f => nv(parsed[f])).length;
+  const pct = Math.round((filled / fields.length) * 100);
+  const hasReceipt = nv(parsed.receiptNumber) && /^[A-Z]{3}\d{10}$/.test(nv(parsed.receiptNumber));
+  const hasA = nv(parsed.aNumber) && /^A\d{9}$/.test(nv(parsed.aNumber));
+  let bonus = 0;
+  if (hasReceipt) bonus += 10;
+  if (hasA) bonus += 5;
+  return Math.min(100, pct + bonus);
+}
+function getConfidenceBand(score) {
+  if (score >= 80) return 'Yüksek';
+  if (score >= 50) return 'Orta';
+  return 'Düşük';
+}
+function summarizeFieldWarnings(parsed, score) {
+  const warns = [];
+  if (nv(parsed.receiptNumber) && !/^[A-Z]{3}\d{10}$/.test(nv(parsed.receiptNumber))) {
+    warns.push('Receipt# formatı şüpheli olduğu için temizlendi');
+    parsed.receiptNumber = null;
+  }
+  if (nv(parsed.aNumber) && !/^A\d{9}$/.test(nv(parsed.aNumber))) {
+    warns.push('A-Number formatı şüpheli olduğu için temizlendi');
+    parsed.aNumber = null;
+  }
+  const fields = ['receiptNumber', 'aNumber', 'applicantName', 'formType', 'noticeDate', 'caseStatus'];
+  const filled = fields.filter(f => nv(parsed[f])).length;
+  const band = getConfidenceBand(score);
+  if (score < 50) warns.push(`Düşük çıkarım güven tahmini (%${score}; ${filled}/${fields.length} temel alan dolu) — manuel kontrol önerilir`);
+  else if (score < 80) warns.push(`Orta çıkarım güven tahmini (%${score}; ${filled}/${fields.length} temel alan dolu) — gözle kontrol önerilir`);
+  return warns.join(' | ');
+}
+function confLabel(score) {
+  if (score >= 80) return { cls: 'conf-high', txt: `${score}% ✓` };
+  if (score >= 50) return { cls: 'conf-mid', txt: `${score}% ~` };
+  return { cls: 'conf-low', txt: `${score}% !` };
+}
+
+async function processOne(item, signal) {
+  item.status = 'processing';
+  renderQ();
+  const key = getKey();
+  const keyErr = validateApiKey(key);
+  if (keyErr) {
+    item.status = 'error';
+    item.result = { _filename: item.file.name, _error: keyErr };
+    renderQ();
+    return;
+  }
+
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    if (signal && signal.aborted) {
+      item.status = 'pending';
+      item.result = null;
+      renderQ();
+      return;
+    }
+    const can = canRequest();
+    if (can === false) {
+      item.status = 'error';
+      item.result = { _filename: item.file.name, _error: 'Oturum istek limiti aşıldı.' };
+      renderQ();
+      return;
+    }
+    if (can === 'throttle') await waitForRateWindow();
+
+    try {
+      const wf = await maybeConvert(item.file);
+      item.blob = wf;
+      const b64 = await toB64(wf);
+      const isPdf = wf.type === 'application/pdf';
+      const isImg = wf.type.startsWith('image/');
+      if (!isPdf && !isImg) throw new Error('Desteklenmeyen dosya türü');
+
+      const ca = isImg
+        ? [{ type: 'image', source: { type: 'base64', media_type: wf.type, data: b64 } }, { type: 'text', text: PROMPT }]
+        : [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }, { type: 'text', text: PROMPT }];
+
+      recordRequest();
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1200, messages: [{ role: 'user', content: ca }] })
+      });
+
+      if (resp.status === 429) {
+        const retry = parseInt(resp.headers.get('Retry-After') || '10');
+        if (attempt < MAX_RETRIES) {
+          toast(`Rate limit — ${retry}s bekleniyor (deneme ${attempt}/${MAX_RETRIES})`, 'warn');
+          await sleep(retry * 1000);
+          continue;
+        }
+        throw new Error('API rate limit aşıldı. Lütfen bekleyin.');
+      }
+      if (resp.status === 401) {
+        const err = new Error("API anahtarı doğrulanamadı (401 Unauthorized). Lütfen key'i kontrol edin.");
+        err._noRetry = true;
+        throw err;
+      }
+      if (resp.status === 400) {
+        const err = new Error('Geçersiz istek (400). Dosya türünü veya istek yapısını kontrol edin.');
+        err._noRetry = true;
+        throw err;
+      }
+      if (resp.status === 529 || resp.status === 503) {
+        if (attempt < MAX_RETRIES) {
+          await sleep(3000 * attempt);
+          continue;
+        }
+        throw new Error('Claude API geçici olarak kullanılamıyor (' + resp.status + ').');
+      }
+      if (!resp.ok) throw new Error(`API hatası: HTTP ${resp.status}`);
+
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      const text = (data.content || []).map(c => c.text || '').join('');
+      let parsed;
+      try {
+        parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      } catch {
+        throw new Error('JSON ayrıştırma hatası — model beklenmedik çıktı verdi.');
+      }
+
+      parsed._filename = item.file.name;
+      parsed._synced = false;
+      const confScore = calcConfidence(parsed);
+      parsed._confidence = confScore + '%';
+      parsed._fieldWarn = summarizeFieldWarnings(parsed, confScore) || '';
+      parsed._newName = buildName(parsed, item.file, wf);
+
+      item.result = parsed;
+      item.status = 'done';
+      renderQ();
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        item.status = 'pending';
+        item.result = null;
+        renderQ();
+        return;
+      }
+      if (e._noRetry || attempt === MAX_RETRIES) {
+        item.result = { _filename: item.file.name, _error: e.message };
+        item.status = 'error';
+        renderQ();
+        return;
+      }
+      await sleep(1500 * attempt);
+    }
+  }
+}
+
+async function runAll() {
+  const keyErr = validateApiKey(getKey());
+  if (keyErr) { showGuardrail(keyErr, 'err', '🔑'); return; }
+  const pending = files.filter(f => f.status !== 'done');
+  if (!pending.length) return;
+  if (sessionCount >= RATE_LIMIT.maxSession) {
+    showGuardrail(`Oturum limiti aşıldı (${RATE_LIMIT.maxSession} istek). Sayfayı yenileyerek devam edin.`, 'err', '🚫');
+    return;
+  }
+
+  isProcessing = true;
+  abortController = new AbortController();
+  const signal = abortController.signal;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('abortBtn').style.display = 'inline-flex';
+  document.getElementById('retryBtn').style.display = 'none';
+  ['zipBtn','xlsBtn','resultsSection'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  const pw = document.getElementById('progressWrap');
+  const pf = document.getElementById('progressFill');
+  const pt = document.getElementById('progressText');
+  const pe = document.getElementById('progressEta');
+  pw.style.display = 'block';
+  pf.style.width = '0%';
+  const startTime = Date.now();
+
+  for (let i = 0; i < pending.length; i++) {
+    if (signal.aborted) { pt.textContent = 'İşlem kullanıcı tarafından durduruldu.'; break; }
+    pt.textContent = `İşleniyor: ${pending[i].file.name} (${i + 1} / ${pending.length})`;
+    if (i > 0) {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const rate = i / elapsed;
+      const remaining = (pending.length - i) / rate;
+      pe.textContent = `Tahmini süre: ~${Math.ceil(remaining)}s`;
+    }
+    await processOne(pending[i], signal);
+    pf.style.width = Math.round(((i + 1) / pending.length) * 100) + '%';
+  }
+
+  const done = files.filter(f => f.status === 'done').length;
+  const errs = files.filter(f => f.status === 'error').length;
+  const warnings = files.filter(f => f.status === 'done' && f.result && f.result._fieldWarn).length;
+  pt.textContent = `Tamamlandı — ${done} başarılı${errs ? ', ' + errs + ' hatalı' : ''}${warnings ? ', ' + warnings + ' uyarılı' : ''}.`;
+  pe.textContent = '';
+  if (errs > 0) {
+    showGuardrail(`${errs} dosya işlenemedi. "Hatalıları Yeniden Dene" butonu ile tekrar deneyebilirsiniz.`, 'warn', '⚠');
+    document.getElementById('retryBtn').style.display = 'inline-flex';
+  }
+  if (warnings > 0) {
+    toast(`${warnings} belgede kontrol uyarısı var — tahmin ve alanları gözden geçirmeniz önerilir.`, 'warn', 6000);
+  }
+
+  results = files.filter(f => f.result).map(f => f.result);
+  renderTable();
+
+  const pendingSyncCount = files.filter(f => f.status === 'done' && f.result && !f.result._error && !f.result._synced).length;
+  if (pendingSyncCount > 0 && !signal.aborted) {
+    pt.textContent = `Power Automate çalıştırılıyor (${pendingSyncCount} kayıt)...`;
+    pe.textContent = 'Lütfen sayfayı kapatmayın.';
+    try {
+      await appendRowsToAutomation();
+      pt.textContent = `Tamamlandı — ${done} başarılı${errs ? ', ' + errs + ' hatalı' : ''}${warnings ? ', ' + warnings + ' uyarılı' : ''}. Excel aktarımı tamamlandı.`;
+      pe.textContent = '';
+    } catch (e) {
+      pt.textContent = `Tamamlandı — ${done} başarılı${errs ? ', ' + errs + ' hatalı' : ''}${warnings ? ', ' + warnings + ' uyarılı' : ''}.`;
+      pe.textContent = 'Excel aktarımı başarısız oldu.';
+      showGuardrail('Power Automate aktarımı başarısız: ' + e.message, 'err', '🔗');
+      toast('Power Automate aktarımı başarısız: ' + e.message, 'err', 6000);
+    }
+  }
+
+  document.getElementById('zipBtn').style.display = 'inline-flex';
+  document.getElementById('xlsBtn').style.display = 'inline-flex';
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('abortBtn').style.display = 'none';
+  isProcessing = false;
+}
+
+function abortProcessing() {
+  if (abortController) abortController.abort();
+  document.getElementById('abortBtn').style.display = 'none';
+  document.getElementById('progressText').textContent = 'Durduruluyor...';
+  toast('İşlem durduruldu.', 'warn');
+}
+function retryErrors() {
+  files.filter(f => f.status === 'error').forEach(f => { f.status = 'pending'; f.result = null; });
+  document.getElementById('retryBtn').style.display = 'none';
+  closeGuardrail();
+  runAll();
+}
+
+const FI = document.getElementById('fileInput');
+const DZ = document.getElementById('dropZone');
+FI.addEventListener('change', e => addFiles([...e.target.files]));
+DZ.addEventListener('dragover', e => { e.preventDefault(); DZ.classList.add('drag'); });
+DZ.addEventListener('dragleave', () => DZ.classList.remove('drag'));
+DZ.addEventListener('drop', e => { e.preventDefault(); DZ.classList.remove('drag'); addFiles([...e.dataTransfer.files]); });
+
+function addFiles(nf) {
+  const errors = [];
+  let added = 0;
+  const wouldExceed = files.length + nf.length > MAX_FILES_SESSION;
+  nf.forEach(f => {
+    if (files.length >= MAX_FILES_SESSION) { errors.push(`Limit aşıldı: max ${MAX_FILES_SESSION} dosya`); return; }
+    const err = validateFile(f);
+    if (err) { errors.push(`${f.name}: ${err}`); return; }
+    if (!files.find(x => x.file.name === f.name && x.file.size === f.size)) {
+      files.push({ file: f, status: 'pending', result: null, blob: null, id: Math.random().toString(36).slice(2) });
+      added++;
+    }
+  });
+  if (errors.length) {
+    showGuardrail(errors.slice(0,3).join(' | ') + (errors.length > 3 ? ` +${errors.length - 3} daha` : ''), 'err', '🚫');
+  } else if (wouldExceed && added > 0) {
+    showGuardrail(`Bazı dosyalar oturum limitini (${MAX_FILES_SESSION}) aştığı için eklenmedi.`, 'warn', '⚠');
+  } else if (added > 0) {
+    closeGuardrail();
+  }
+  FI.value = '';
+  renderQ();
+  updateBtns();
+}
+function removeFile(id) {
+  files = files.filter(f => f.id !== id);
+  renderQ();
+  updateBtns();
+  if (!files.length) ['resultsSection','xlsBtn','zipBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+}
+function clearAll() {
+  if (isProcessing || isAutoSyncing) abortProcessing();
+  files = [];
+  results = [];
+  sessionCount = 0;
+  requestLog = [];
+  renderQ();
+  updateBtns();
+  ['resultsSection','progressWrap'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  ['zipBtn','xlsBtn','clearBtn','retryBtn','abortBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  updateRateBadge();
+  closeGuardrail();
+}
+function updateBtns() {
+  document.getElementById('runBtn').disabled = files.length === 0 || isProcessing;
+  document.getElementById('clearBtn').style.display = files.length ? 'inline-flex' : 'none';
+}
+function renderQ() {
+  const q = document.getElementById('queue');
+  q.innerHTML = '';
+  files.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'q-item ' + item.status;
+    const th = document.createElement('div');
+    th.className = 'q-thumb';
+    if (item.file.type.startsWith('image/') && !isHeic(item.file)) {
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(item.file);
+      th.appendChild(img);
+    } else {
+      const l = document.createElement('div');
+      l.className = 'q-thumb-lbl';
+      l.textContent = ext(item.file).toUpperCase();
+      th.appendChild(l);
+    }
+    const info = document.createElement('div');
+    const nb = item.result && item.result._newName ? `<span class="rename-badge">→ ${item.result._newName}</span>` : '';
+    const warn = item.result && item.result._fieldWarn ? `<span style="font-size:10px;color:var(--orange);font-family:'IBM Plex Mono',monospace;display:block;margin-top:2px">⚠ ${item.result._fieldWarn}</span>` : '';
+    info.innerHTML = `<div class="q-name" title="${item.file.name}">${item.file.name}</div><div class="q-sub">${fmtSz(item.file.size)} ${nb}</div>${warn}`;
+    const badge = document.createElement('div');
+    badge.className = 'q-badge ' + item.status;
+    badge.textContent = { pending:'Bekliyor', processing:'İşleniyor...', done:'✓ Tamamlandı', error:'✗ Hata' }[item.status] || '';
+    const confEl = document.createElement('div');
+    if (item.status === 'done' && item.result && item.result._confidence) {
+      const sc = parseInt(item.result._confidence);
+      const { cls, txt } = confLabel(sc);
+      confEl.innerHTML = `<span class="${cls}">${txt}</span>`;
+    }
+    const del = document.createElement('button');
+    del.className = 'q-del';
+    del.textContent = '×';
+    del.onclick = () => { if (!isProcessing || item.status !== 'processing') removeFile(item.id); };
+    [th, info, badge, confEl, del].forEach(el => div.appendChild(el));
+    q.appendChild(div);
+  });
+}
+function dlSingle(item) {
+  const blob = item.blob || item.file;
+  const name = item.result && item.result._newName ? item.result._newName : item.file.name;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+async function downloadZip() {
+  const done = files.filter(f => f.status === 'done' && f.result && !f.result._error);
+  if (!done.length) return;
+  const btn = document.getElementById('zipBtn');
+  btn.disabled = true;
+  btn.textContent = 'Hazırlanıyor...';
+  try {
+    const zip = new JSZip();
+    const used = {};
+    for (const item of done) {
+      const blob = item.blob || item.file;
+      let name = item.result && item.result._newName ? item.result._newName : item.file.name;
+      if (used[name] !== undefined) {
+        used[name]++;
+        const d = name.lastIndexOf('.');
+        name = d > -1 ? name.slice(0,d) + '_' + used[name] + name.slice(d) : name + '_' + used[name];
+      } else {
+        used[name] = 0;
+      }
+      zip.file(name, await blob.arrayBuffer());
+    }
+    const content = await zip.generateAsync({ type:'blob', compression:'STORE' });
+    const stamp = new Date().toISOString().slice(0,10);
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `immigration_renamed_${stamp}_${done.length}files.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast(`${done.length} dosya ZIP olarak indirildi ✓`, 'ok');
+  } catch (e) {
+    toast('ZIP oluşturma hatası: ' + e.message, 'err');
+  }
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 10l5 4 5-4M7 2v12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Tümünü İndir (ZIP)`;
+}
+
+function renderTable() {
+  const tbl = document.getElementById('tbl');
+  tbl.innerHTML = '';
+  const th = tbl.createTHead();
+  const hr = th.insertRow();
+  ['', 'Orijinal', 'Yeni İsim', 'Tahmin', ...COLS.map(c => c.label)].forEach(h => {
+    const t = document.createElement('th');
+    t.textContent = h;
+    hr.appendChild(t);
+  });
+  const tb = tbl.createTBody();
+  files.filter(f => f.result).forEach(item => {
+    const r = item.result;
+    const tr = tb.insertRow();
+    const td0 = tr.insertCell();
+    if (!r._error) {
+      const dl = document.createElement('button');
+      dl.className = 'btn-dl';
+      dl.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 8l4 3 4-3M5 1v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg> İndir`;
+      dl.onclick = () => dlSingle(item);
+      td0.appendChild(dl);
+      if (r._synced) {
+        const dot = document.createElement('span');
+        dot.className = 'synced-dot';
+        dot.title = 'Excel tablosuna aktarıldı ✓';
+        td0.appendChild(dot);
+      }
+    }
+    const tdf = tr.insertCell();
+    tdf.className = 'cf';
+    tdf.title = r._filename;
+    tdf.textContent = r._filename || '—';
+    const tdn = tr.insertCell();
+    tdn.className = 'cnew';
+    tdn.textContent = r._newName || '—';
+    const tdc = tr.insertCell();
+    if (!r._error && r._confidence) {
+      const sc = parseInt(r._confidence);
+      const { cls, txt } = confLabel(sc);
+      tdc.innerHTML = `<span class="${cls}">${txt}</span>`;
+    }
+    if (r._error) {
+      const t = tr.insertCell();
+      t.colSpan = COLS.length;
+      t.className = 'ce';
+      t.textContent = 'Hata: ' + r._error;
+    } else {
+      COLS.forEach(c => {
+        const t = tr.insertCell();
+        const v = nv(r[c.key]);
+        t.textContent = v || '—';
+        t.className = v ? 'cv' : 'cn';
+      });
+    }
+    tb.appendChild(tr);
+  });
+  const dn = results.filter(r => !r._error).length;
+  const er = results.filter(r => r._error).length;
+  const hi = results.filter(r => !r._error && (nv(r.receiptNumber) || nv(r.aNumber))).length;
+  const warns = results.filter(r => !r._error && r._fieldWarn).length;
+  const avgConf = results.filter(r => r._confidence).length
+    ? Math.round(results.filter(r => r._confidence).reduce((a,r) => a + parseInt(r._confidence), 0) / results.filter(r => r._confidence).length)
+    : 0;
+  document.getElementById('stats').innerHTML = `
+    <span class="stat"><b>${dn}</b> başarılı</span>
+    <span class="stat"><b>${er}</b> hatalı</span>
+    <span class="stat">ID tespit: <b>${hi}</b></span>
+    ${warns ? `<span class="stat" style="color:var(--orange)"><b>${warns}</b> uyarı</span>` : ''}
+    ${avgConf ? `<span class="stat">Ort. tahmin: <b>${avgConf}%</b></span>` : ''}
+  `;
+  document.getElementById('resultsSection').style.display = 'block';
+}
+
+function getAutomationRows() {
+  return files
+    .filter(f => f.status === 'done' && f.result && !f.result._error && !f.result._synced)
+    .map(f => {
+      const r = f.result;
+      return {
+        'Created Date': new Date().toLocaleDateString('en-CA'),
+        'Original Name': r._filename || '',
+        'New Name': r._newName || '',
+        'Receipt Number': nv(r.receiptNumber) || '',
+        'A-Number': nv(r.aNumber) || '',
+        'Applicant Name': nv(r.applicantName) || '',
+        'Form': nv(r.formType) || '',
+        'Notice Date': nv(r.noticeDate) || '',
+        'Received Date': nv(r.receivedDate) || '',
+        'Case Status': nv(r.caseStatus) || '',
+        'USCIS Center': nv(r.uscisCenter) || '',
+        'Notes': nv(r.additionalNotes) || ''
+      };
+    });
+}
+
+async function appendRowsToAutomation() {
+  const rows = getAutomationRows();
+  if (!rows.length) return { sent: 0, skipped: true };
+  isAutoSyncing = true;
+  try {
+    const payload = {
+      mode: 'append_rows',
+      rowCount: rows.length,
+      rows
+    };
+    const response = await fetch(AUTOMATION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    files.filter(f => f.status === 'done' && f.result && !f.result._error && !f.result._synced)
+      .forEach(f => { f.result._synced = true; });
+    renderQ();
+    renderTable();
+    toast(`${rows.length} kayıt Power Automate üzerinden Excel'e eklendi ✓`, 'ok', 5000);
+    return { sent: rows.length, skipped: false };
+  } finally {
+    isAutoSyncing = false;
+  }
+}
+
+async function downloadXlsx() {
+  if (!results.length) return;
+  const wb = XLSX.utils.book_new();
+  const hdr = ['Original File', 'New Name', ...COLS.map(c => c.label), 'Processed Date'];
+  const rows = [hdr];
+  results.forEach(r => {
+    const row = [r._filename || '', r._newName || ''];
+    COLS.forEach(c => row.push(nv(r[c.key]) || ''));
+    row.push(new Date().toLocaleDateString('en-CA'));
+    rows.push(row);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 28 }, { wch: 40 }, ...COLS.map(c => ({ wch: c.key === 'additionalNotes' ? 40 : c.key === 'applicantName' ? 24 : 16 })), { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Immigration Data');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `immigration_extract_${stamp}_${results.length}docs.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  toast('Excel raporu indirildi ✓ (lokal kopya)', 'ok', 4000);
+}
+
+window.addEventListener('beforeunload', e => {
+  if (isProcessing || isAutoSyncing) {
+    e.preventDefault();
+    e.returnValue = 'Belge tarama veya Excel aktarımı devam ediyor. Sayfayı kapatmak istediğinizden emin misiniz?';
+  }
+});
+
+updateRateBadge();
+</script>
+</body>
+</html>
