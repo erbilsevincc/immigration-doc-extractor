@@ -856,7 +856,7 @@ function getAutomationRows() {
     .filter(f => f.status === 'done' && f.result && !f.result._error && !f.result._synced)
     .map(f => {
       const r = f.result;
-      const _d = new Date(); const createdDate = String(_d.getFullYear()).slice(2) + String(_d.getMonth()+1).padStart(2,'0') + String(_d.getDate()).padStart(2,'0');
+      const _d = new Date(); const createdDate = String(_d.getFullYear()).slice(2) + '_' + String(_d.getMonth()+1).padStart(2,'0') + '_' + String(_d.getDate()).padStart(2,'0');
       const newName = r._newName || '';
       const dotIdx = newName.lastIndexOf('.');
       const newNameWithDate = dotIdx > -1
